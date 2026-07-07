@@ -17,7 +17,7 @@ jobs:
       matrix:
         board: [tufty2350, badger2350, blinky2350]
         # The async backend (see variants/badgeware_common.cmake).
-        async: [asyncify-fast, jspi]
+        async: [asyncify, jspi]
 
     steps:
       - name: Checkout
