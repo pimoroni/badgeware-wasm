@@ -23,6 +23,12 @@
 // uctypes.addressof to blit it to the host canvas without copying.
 #define MICROPY_PY_UCTYPES                      (1)
 
+// The badgeware firmware identifies the board from os.uname().machine, e.g.
+//   MODEL = os.uname().machine[9:-17].lower()   # "Pimoroni Tufty 2350 with RP2350" -> "tufty"
+// so expose os.uname() (its machine field is MICROPY_HW_BOARD_NAME " with "
+// MICROPY_HW_MCU_NAME). machine.unique_id() is provided by the machine shim.
+#define MICROPY_PY_OS_UNAME                     (1)
+
 // No native code emitter on wasm, so accept @micropython.native (it would
 // otherwise be a SyntaxError) and run the function as bytecode. @micropython.viper
 // is deliberately left erroring.

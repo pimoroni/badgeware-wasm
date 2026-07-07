@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Badgeware WASM - Tufty 2350 simulator</title>
+<title>Badgeware WASM simulator</title>
 <style>
   :root { color-scheme: dark; }
   body {
@@ -25,7 +25,7 @@
 </style>
 </head>
 <body>
-  <h1>Badgeware WASM - Tufty 2350 simulator</h1>
+  <h1 id="board">Badgeware WASM simulator</h1>
   <canvas id="screen" width="640" height="480"></canvas>
   <div id="status">loading MicroPython...</div>
   <div class="hint">
@@ -124,6 +124,19 @@ while True:
 `;
 
 const mp = await loadMicroPython();
+
+// Name the page after the board this build is for (os.uname().machine ->
+// "Pimoroni <Board> 2350 with RP2350"). Python hands it out via a JS global.
+try {
+  mp.runPython("import js, os\njs.globalThis.__badge_machine = os.uname().machine");
+  const machine = String(globalThis.__badge_machine || "");
+  const name = machine.split(" with ")[0];
+  if (name) {
+    document.getElementById("board").textContent = name + " simulator";
+    document.title = name + " - Badgeware WASM";
+  }
+} catch (_) { /* leave the default heading */ }
+
 status.textContent = "running";
 try {
   await mp.runPythonAsync(DEMO);
