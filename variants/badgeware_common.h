@@ -32,4 +32,4 @@
 // No native code emitter on wasm, so accept @micropython.native (it would
 // otherwise be a SyntaxError) and run the function as bytecode. @micropython.viper
 // is deliberately left erroring.
-#define MICROPY_EMIT_NATIVE_AS_BYTECODE         (1)
+#define MICROPY_NATIVE_NOOP                     (1)
