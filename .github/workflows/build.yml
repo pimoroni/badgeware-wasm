@@ -34,7 +34,10 @@ jobs:
       - name: Set up Emscripten
         uses: mymindstorm/setup-emsdk@v14
         with:
-          version: latest
+          # Pinned for reproducibility; matches the toolchain the port is
+          # developed against. The suspend-capable variants (asyncify-fast,
+          # jspi) need a recent emscripten (JSPI, -fwasm-exceptions).
+          version: 6.0.0
 
       - name: Build mpy-cross
         run: make -C micropython/mpy-cross -j$(nproc)
