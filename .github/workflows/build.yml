@@ -1,0 +1,57 @@
+name: build
+
+# Build the badgeware-tufty2350 simulator for the suspend-capable async
+# backends and publish each micropython.mjs / .wasm pair as an artifact.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The async backend (see variants/badgeware-tufty2350/mpconfigvariant.cmake).
+        async: [asyncify-fast, jspi]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Only the submodules this build needs, rather than a full recursive
+      # clone of MicroPython's many submodules.
+      - name: Init submodules
+        run: |
+          git submodule update --init micropython picovector-micropython
+          git -C picovector-micropython submodule update --init
+          git -C micropython submodule update --init lib/micropython-lib
+
+      - name: Set up Emscripten
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: latest
+
+      - name: Build mpy-cross
+        run: make -C micropython/mpy-cross -j$(nproc)
+
+      - name: Configure
+        run: |
+          emcmake cmake -B build-${{ matrix.async }} -S micropython/ports/webassembly \
+            -DMICROPY_VARIANT_DIR=$PWD/variants/badgeware-tufty2350 \
+            -DBADGEWARE_ASYNC=${{ matrix.async }}
+
+      - name: Build
+        run: cmake --build build-${{ matrix.async }} -j$(nproc)
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: badgeware-tufty2350-${{ matrix.async }}
+          path: |
+            build-${{ matrix.async }}/micropython.mjs
+            build-${{ matrix.async }}/micropython.wasm
+          if-no-files-found: error

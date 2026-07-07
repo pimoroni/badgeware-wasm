@@ -1,0 +1,10 @@
+# CMake build directories
+/build-*/
+
+# Emscripten / node
+/emsdk/
+node_modules/
+
+# Editor / OS
+.DS_Store
+*.swp
