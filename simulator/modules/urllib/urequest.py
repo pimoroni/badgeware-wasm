@@ -1,10 +1,10 @@
 # Fetch-backed urllib.urequest.urlopen for the webassembly simulator.
 #
 # A drop-in for micropython-lib's urllib.urequest, but the request goes through
-# the browser's fetch() (see simulator/jsfetch.c) instead of a raw socket. The
-# returned object exposes the usual read()/readinto()/readline()/close() stream
-# interface over the response body, plus a `.status` attribute.
-import _jsfetch
+# the browser's fetch() (fetch.request, backed by js.fetch) instead of a raw
+# socket. The returned object exposes the usual read()/readinto()/readline()/
+# close() stream interface over the response body, plus a `.status` attribute.
+import fetch
 
 
 class _Response:
@@ -46,5 +46,5 @@ def urlopen(url, data=None, method="GET"):
     body = data
     if isinstance(body, str):
         body = body.encode("utf-8")
-    status, reason, headers, content = _jsfetch.request(method, url, "", body)
+    status, reason, headers, content = fetch.request(method, url, "", body)
     return _Response(status, content)

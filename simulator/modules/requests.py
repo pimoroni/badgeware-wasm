@@ -1,10 +1,11 @@
 # Fetch-backed `requests` for the webassembly simulator.
 #
 # Mirrors enough of the micropython-lib `requests` API for typical use, but
-# performs the request via the browser's fetch() (see simulator/jsfetch.c)
-# rather than a raw socket. HTTPS works without `ssl`. Subject to the browser's
-# CORS policy, so cross-origin endpoints must send permissive CORS headers.
-import _jsfetch
+# performs the request via the browser's fetch() (fetch.request, backed by
+# js.fetch) rather than a raw socket. HTTPS works without `ssl`. Subject to the
+# browser's CORS policy, so cross-origin endpoints must send permissive CORS
+# headers.
+import fetch
 
 
 class Response:
@@ -50,7 +51,7 @@ def request(method, url, data=None, json=None, headers=None, auth=None, timeout=
         hdr["Authorization"] = "Basic " + token
 
     header_str = "\n".join("%s: %s" % (k, v) for k, v in hdr.items())
-    status, reason, resp_headers, content = _jsfetch.request(method, url, header_str, body)
+    status, reason, resp_headers, content = fetch.request(method, url, header_str, body)
     return Response(status, reason, resp_headers, content)
 
 

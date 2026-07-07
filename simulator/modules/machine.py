@@ -261,7 +261,7 @@ def unique_id():
 
 
 def freq(*args):
-    return 200000000  # 200 MHz, matching the tufty2350 board
+    return 250000000  # 250 MHz, matching the tufty2350 board
 
 
 def idle(*args):

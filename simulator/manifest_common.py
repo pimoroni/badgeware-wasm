@@ -42,7 +42,7 @@ module("picovector_io.py", base_path=_SIM, opt=3)
 
 # Networking. A browser can't open raw sockets, so the socket-based `requests`
 # and `urllib.urequest` from micropython-lib can't run here; freeze fetch-backed
-# shims (backed by the _jsfetch C module) under the usual names. `umqtt.simple`
+# shims (backed by js.fetch, via fetch.py) under the usual names. `umqtt.simple`
 # is raw-TCP with no fetch equivalent, frozen for source compatibility only.
 module("requests.py", base_path=_SIM, opt=3)
 package("urllib", ("urequest.py",), base_path=_SIM, opt=3)

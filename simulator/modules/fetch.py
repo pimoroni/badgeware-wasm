@@ -1,7 +1,53 @@
 import io
 import time
 import json
-import _jsfetch
+
+import js
+from jsffi import run_sync
+
+
+class _Poll:
+    """Drive a JS promise from a generator without blocking: then/catch flip a
+    flag, and the caller yields until it settles. The promise's then() keeps our
+    callbacks (and therefore this object) alive until it resolves."""
+
+    def __init__(self, promise):
+        self.done = False
+        self.value = None
+        self.error = None
+        promise.then(self._ok, self._err)
+
+    def _ok(self, value):
+        self.value = value
+        self.done = True
+
+    def _err(self, error):
+        self.error = error
+        self.done = True
+
+
+def _headers_to_str(js_headers):
+    return "\r\n".join("%s: %s" % (p[0], p[1]) for p in js_headers)
+
+
+def request(method, url, headers="", body=None):
+    """Blocking one-shot HTTP via the browser's fetch(), suspending the VM
+    (jsffi.run_sync) until it completes. Same shape as the old _jsfetch.request:
+    returns (status, reason, response_headers_str, body_bytes)."""
+    opts = js.Object.new()
+    opts.method = method
+    if headers:
+        hdrs = js.Object.new()
+        for line in headers.split("\n"):
+            if ":" in line:
+                key, _, value = line.partition(":")
+                setattr(hdrs, key.strip(), value.strip())
+        opts.headers = hdrs
+    if body is not None:
+        opts.body = js.Uint8Array.new(body)
+    resp = run_sync(js.fetch(url, opts))
+    content = bytes(js.Uint8Array.new(run_sync(resp.arrayBuffer())))
+    return resp.status, resp.statusText, _headers_to_str(resp.headers), content
 
 
 class HTTPException(Exception):
@@ -14,25 +60,17 @@ class AsyncFetch:
     """Cooperative, streaming HTTP client for the simulator.
 
     A shim with the same interface as the raw-socket AsyncFetch, but backed by
-    the browser's Fetch API via the _jsfetch C module. The response body is read
-    incrementally (a chunk per update() call) and streamed to a file or an
-    in-memory buffer, so it plays nicely with a frame loop and never blocks the
-    whole download in one step.
+    the browser's Fetch API (js.fetch). The response body is read incrementally
+    from a ReadableStream reader - a chunk per update() call, cooperatively (no
+    blocking), so it plays nicely with a frame loop and never blocks the whole
+    download in one step.
     """
-
-    FETCH_BLOCK_SIZE = 1024
-    buffer = bytearray(FETCH_BLOCK_SIZE)
 
     STATUS_TEXT = ["Idle", "Fetching", "Done", "Error"]
     IDLE = 0
     FETCHING = 1
     DONE = 2
     ERROR = 3
-
-    # _jsfetch.stream_phase() values.
-    _PHASE_PENDING = 0
-    _PHASE_READY = 1
-    _PHASE_ERROR = 3
 
     def __init__(self, host, port=None, use_tls=True, debug=False):
         self._debug = debug
@@ -107,33 +145,45 @@ class AsyncFetch:
     def _http_fetch(self):
         self._status_code = None
         self._response_headers = {}
+        self._reader = None
 
         if self._data is not None and self._method == "GET":
             self._method = "POST"
 
-        header_str = "\n".join("%s: %s" % (k, v) for k, v in self._headers.items())
-        _jsfetch.stream_start(self._method, self._url(), header_str, self._data)
+        # Build the fetch() options as a real JS object.
+        opts = js.Object.new()
+        opts.method = self._method
+        if self._headers:
+            hdrs = js.Object.new()
+            for k, v in self._headers.items():
+                setattr(hdrs, k, v)
+            opts.headers = hdrs
+        if self._data is not None:
+            body = self._data.encode("utf-8") if isinstance(self._data, str) else self._data
+            opts.body = js.Uint8Array.new(body)
 
-        # Wait (cooperatively) for the response headers to arrive.
-        while _jsfetch.stream_phase() == AsyncFetch._PHASE_PENDING:
+        # Kick off the fetch and cooperatively wait for the response headers.
+        poll = _Poll(js.fetch(self._url(), opts))
+        while not poll.done:
             yield
+        if poll.error is not None:
+            raise OSError(str(poll.error))
+        resp = poll.value
 
-        if _jsfetch.stream_phase() == AsyncFetch._PHASE_ERROR:
-            raise OSError(_jsfetch.stream_error())
-
-        self._status_code, _reason, header_str = _jsfetch.stream_response()
-        for line in header_str.split("\r\n"):
-            if ": " in line:
-                k, _, v = line.partition(": ")
-                self._response_headers[k] = v
-
-        self._content_length = int(self._response_headers.get("Content-Length", 0))
+        self._status_code = resp.status
+        # A JS Headers object is iterable as [name, value] pairs (names lowercased).
+        for pair in resp.headers:
+            self._response_headers[pair[0]] = pair[1]
+        content_length = resp.headers.get("content-length")
+        self._content_length = int(content_length) if content_length else 0
+        # None for a bodyless response (e.g. HEAD); guard the reader below.
+        self._reader = resp.body.getReader() if resp.body is not None else None
 
         if self._debug:
             print(f"Got status {self._status_code}, {self._content_length} bytes")
 
     def _fetch_to_stream(self):
-        # Grab the headers
+        # Grab the headers (and open the body reader)
         yield from self._http_fetch()
 
         self._buffer_len = 0
@@ -150,18 +200,28 @@ class AsyncFetch:
             if self._debug:
                 print("Streaming to buffer")
 
-        # Pull the body a chunk at a time, until the reader is exhausted.
-        while not _jsfetch.stream_done():
-            yield
-            length = _jsfetch.stream_readinto(AsyncFetch.buffer)
-            if length in (0, None):
-                continue
+        # Pull the body a chunk at a time via the ReadableStream reader, waiting
+        # cooperatively (yield) for each read() to settle so we never block the
+        # frame loop on the whole download.
+        reader = self._reader
+        while reader is not None:
+            poll = _Poll(reader.read())
+            while not poll.done:
+                yield
+            if poll.error is not None:
+                raise OSError(str(poll.error))
+            result = poll.value  # { value: Uint8Array, done: bool }
+            if result.done:
+                break
+            chunk = bytes(result.value)
+            length = len(chunk)
             self._buffer_len += length
             if self._content_length:
                 self._content_length = max(0, self._content_length - length)
             if self._debug:
                 print(f"Fetched {self._buffer_len} bytes")
-            stream.write(AsyncFetch.buffer[:length])
+            stream.write(chunk)
+            yield
 
         # Leave the BytesIO stream open
         if self._file:
