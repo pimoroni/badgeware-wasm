@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Badgeware WASM - Tufty 2350 simulator</title>
+<style>
+  :root { color-scheme: dark; }
+  body {
+    margin: 0; min-height: 100vh; display: grid; place-content: center; gap: 1rem;
+    font: 14px/1.5 system-ui, sans-serif; background: #14151a; color: #d6d8de;
+    text-align: center;
+  }
+  h1 { font-size: 1rem; font-weight: 600; margin: 0; color: #9aa0ac; }
+  #screen {
+    width: 640px; height: 480px; background: #000; border-radius: 8px;
+    image-rendering: pixelated; box-shadow: 0 8px 40px rgba(0,0,0,.5);
+  }
+  kbd {
+    background: #262832; border: 1px solid #363a46; border-radius: 4px;
+    padding: 1px 6px; font-family: ui-monospace, monospace; font-size: 12px;
+  }
+  #status { color: #7f8592; min-height: 1.2em; }
+  .hint { color: #6b7080; }
+</style>
+</head>
+<body>
+  <h1>Badgeware WASM - Tufty 2350 simulator</h1>
+  <canvas id="screen" width="640" height="480"></canvas>
+  <div id="status">loading MicroPython...</div>
+  <div class="hint">
+    buttons: <kbd>A</kbd> <kbd>B</kbd> <kbd>C</kbd> &middot;
+    <kbd>&uarr;</kbd> <kbd>&darr;</kbd> &middot; <kbd>H</kbd> home
+  </div>
+
+<script type="module">
+import { loadMicroPython } from "./micropython.mjs";
+
+const canvas = document.getElementById("screen");
+const ctx = canvas.getContext("2d");
+ctx.imageSmoothingEnabled = false;
+const status = document.getElementById("status");
+
+// Offscreen canvas at the framebuffer's native resolution; we scale it up to
+// the visible canvas with nearest-neighbour so the pixels stay crisp.
+const off = document.createElement("canvas");
+const offctx = off.getContext("2d");
+
+// --- host contract: the simulator's st7789.update() calls this -------------
+// It hands us the address of its RGBA framebuffer in the wasm heap (plus the
+// current width/height); we read the bytes directly - zero copy on the Python
+// side - and paint the canvas.
+globalThis.blitrgba = (addr, w, h) => {
+  const heap = globalThis.Module.HEAPU8;
+  // Copy out of the wasm heap (its buffer can move if memory grows).
+  const pixels = new Uint8ClampedArray(heap.subarray(addr, addr + w * h * 4));
+  if (off.width !== w || off.height !== h) { off.width = w; off.height = h; }
+  offctx.putImageData(new ImageData(pixels, w, h), 0, 0);
+  ctx.drawImage(off, 0, 0, w, h, 0, 0, canvas.width, canvas.height);
+};
+
+// backlight(0..1) - visualised by dimming the canvas.
+globalThis.backlight = (v) => { canvas.style.filter = `brightness(${Math.max(0.15, v)})`; };
+
+// --- host contract: buttons -------------------------------------------------
+// machine.py / picovector_io read this as an active-high pressed bitmask.
+const BUTTON = { HOME: 0x20, A: 0x10, B: 0x08, C: 0x04, UP: 0x02, DOWN: 0x01 };
+const KEYS = {
+  "a": BUTTON.A, "b": BUTTON.B, "c": BUTTON.C,
+  "ArrowUp": BUTTON.UP, "ArrowDown": BUTTON.DOWN, "h": BUTTON.HOME,
+};
+let buttons = 0;
+globalThis.sim_buttons = () => buttons;
+addEventListener("keydown", (e) => {
+  const b = KEYS[e.key];
+  if (b !== undefined) { buttons |= b; e.preventDefault(); }
+});
+addEventListener("keyup", (e) => {
+  const b = KEYS[e.key];
+  if (b !== undefined) { buttons &= ~b; e.preventDefault(); }
+});
+
+// --- a small badgeware-style demo ------------------------------------------
+const DEMO = `
+import st7789, picovector, picovector_io
+color = picovector.color
+
+display = st7789.ST7789()
+display.fullres(True)                       # 320x240
+W, H = display.WIDTH, display.HEIGHT
+img = picovector.image(W, H, memoryview(display))
+
+x, y = 40.0, 40.0
+dx, dy = 3.2, 2.4
+size = 56
+
+while True:
+    picovector_io.poll()
+    held = picovector_io.held
+
+    x += dx; y += dy
+    if x < 0 or x + size > W: dx = -dx; x += dx
+    if y < 0 or y + size > H: dy = -dy; y += dy
+
+    img.pen = color.black
+    img.clear()
+    # A button tints the square; the D-pad nudges it.
+    img.pen = color.green if held else color.red
+    if picovector_io.BUTTON_UP in held:    y -= 6
+    if picovector_io.BUTTON_DOWN in held:  y += 6
+    img.rectangle(int(x), int(y), size, size)
+    display.update()
+`;
+
+const mp = await loadMicroPython();
+status.textContent = "running";
+try {
+  await mp.runPythonAsync(DEMO);
+} catch (e) {
+  status.textContent = "stopped: " + e;
+  console.error(e);
+}
+</script>
+</body>
+</html>
