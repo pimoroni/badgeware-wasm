@@ -53,6 +53,14 @@ BUILD="build-$BOARD-$ASYNC"
 emcmake cmake -B "$BUILD" -S micropython/ports/webassembly \
     -DMICROPY_VARIANT_DIR="$VARIANT_DIR" \
     -DBADGEWARE_ASYNC="$ASYNC"
+
+# The shared cmake qstr-extraction step depends on the .c/.cpp sources but not on
+# the config headers, so an incremental build after an mpconfig*.h change can
+# compile new code against a stale generated qstr table (e.g. "undeclared
+# MP_QSTR_sysname" after enabling os.uname). Drop the qstr cache so it always
+# re-extracts; object compilation still builds incrementally.
+rm -f "$BUILD/genhdr/qstr.i.last"
+
 cmake --build "$BUILD" -j"$(jobs)"
 
 # Stage for the host page.
