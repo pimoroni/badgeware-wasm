@@ -79,11 +79,14 @@ cmake --build build -j
 # -> build/micropython.mjs + build/micropython.wasm
 ```
 
-Or use the helper, which also stages the result for the host page:
+Or use the helper, which builds a self-contained servable site (the built
+micropython.mjs/.wasm plus host/index.html) in the build directory:
 
 ```sh
-tools/build.sh tufty2350            # or badger2350 / blinky2350
-python3 -m http.server -d host 8000 # then open http://localhost:8000/
+tools/build.sh tufty2350             # board: tufty2350 | badger2350 | blinky2350
+tools/build.sh tufty2350 jspi        # optional async backend: asyncify-fast | jspi
+python3 -m http.server -d build-tufty2350-asyncify-fast 8000
+# then open http://localhost:8000/
 ```
 
 [pv]: https://github.com/pimoroni/picovector-micropython

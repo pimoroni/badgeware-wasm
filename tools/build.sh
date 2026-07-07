@@ -7,8 +7,9 @@
 #
 # Activates the Emscripten SDK if emcc isn't already on PATH (looking for a
 # sibling ../emsdk or $EMSDK), initialises the submodules the build needs,
-# builds mpy-cross, then configures + builds the variant and copies
-# micropython.mjs/.wasm into host/ so you can serve it.
+# builds mpy-cross, configures + builds the variant, then drops the host page
+# (host/index.html) into the build directory so it's a self-contained, servable
+# site.
 set -euo pipefail
 
 BOARD="${1:-${BADGEWARE_BOARD:-tufty2350}}"
@@ -50,24 +51,30 @@ if [ ! -f "$VARIANT_DIR/mpconfigvariant.cmake" ]; then
 fi
 
 BUILD="build-$BOARD-$ASYNC"
+
+# The shared cmake rules don't track config headers as dependencies of the qstr
+# and frozen-content generators, so an incremental build after an mpconfig*.h
+# change can desync those generated tables (e.g. "undeclared MP_QSTR_sysname",
+# or "redefinition of MP_QSTR_machine" between the qstr and frozen pools). If a
+# config header changed since this build was configured, wipe the build dir so
+# the generated tables regenerate consistently.
+if [ -f "$BUILD/CMakeCache.txt" ] && \
+   [ -n "$(find variants -name '*.h' -newer "$BUILD/CMakeCache.txt" 2>/dev/null)" ]; then
+    echo "config header changed since last build; clean rebuild for consistent qstr/frozen tables"
+    rm -rf "$BUILD"
+fi
+
 emcmake cmake -B "$BUILD" -S micropython/ports/webassembly \
     -DMICROPY_VARIANT_DIR="$VARIANT_DIR" \
     -DBADGEWARE_ASYNC="$ASYNC"
 
-# The shared cmake qstr-extraction step depends on the .c/.cpp sources but not on
-# the config headers, so an incremental build after an mpconfig*.h change can
-# compile new code against a stale generated qstr table (e.g. "undeclared
-# MP_QSTR_sysname" after enabling os.uname). Drop the qstr cache so it always
-# re-extracts; object compilation still builds incrementally.
-rm -f "$BUILD/genhdr/qstr.i.last"
-
 cmake --build "$BUILD" -j"$(jobs)"
 
-# Stage for the host page.
-mkdir -p host
-cp "$BUILD/micropython.mjs" "$BUILD/micropython.wasm" host/
+# Drop the host page into the build output so $BUILD is a self-contained site
+# (micropython.mjs + micropython.wasm + index.html). host/ stays source-only.
+cp "$ROOT/host/index.html" "$BUILD/index.html"
 
 echo
-echo "Built '$BOARD' ($ASYNC) -> host/micropython.mjs (+ .wasm)"
-echo "Serve it:  python3 -m http.server -d host 8000"
+echo "Built '$BOARD' ($ASYNC) -> $BUILD/ (micropython.mjs + .wasm + index.html)"
+echo "Serve it:  python3 -m http.server -d $BUILD 8000"
 echo "Then open: http://localhost:8000/"

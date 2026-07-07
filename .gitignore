@@ -1,9 +1,6 @@
-# CMake build directories
+# CMake build directories (build.sh also drops host/index.html in here so the
+# build dir is a self-contained, servable site)
 /build-*/
-
-# Built artifacts staged for the host page (index.html is committed)
-/host/micropython.mjs
-/host/micropython.wasm
 
 # Emscripten / node
 /emsdk/
