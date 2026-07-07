@@ -81,18 +81,29 @@ addEventListener("keyup", (e) => {
 });
 
 // --- a small badgeware-style demo ------------------------------------------
+// Board-agnostic: uses whichever display driver this build froze (Tufty ST7789,
+// Badger SSD1680 or Blinky), and scales to that display's resolution.
 const DEMO = `
-import st7789, picovector, picovector_io
+import picovector, picovector_io
 color = picovector.color
 
-display = st7789.ST7789()
-display.fullres(True)                       # 320x240
+display = None
+for _mod, _cls in (("st7789", "ST7789"), ("ssd1680", "SSD1680"), ("blinky", "Blinky")):
+    try:
+        display = getattr(__import__(_mod), _cls)()
+        break
+    except ImportError:
+        pass
+
+if hasattr(display, "fullres"):
+    display.fullres(True)                   # Tufty: 320x240 hires
+
 W, H = display.WIDTH, display.HEIGHT
 img = picovector.image(W, H, memoryview(display))
 
-x, y = 40.0, 40.0
-dx, dy = 3.2, 2.4
-size = 56
+size = max(4, min(W, H) // 4)
+x, y = 1.0, 1.0
+dx, dy = max(1.0, W / 100), max(1.0, H / 120)
 
 while True:
     picovector_io.poll()
@@ -104,10 +115,10 @@ while True:
 
     img.pen = color.black
     img.clear()
-    # A button tints the square; the D-pad nudges it.
+    # A/B/C tint the square; the D-pad nudges it.
     img.pen = color.green if held else color.red
-    if picovector_io.BUTTON_UP in held:    y -= 6
-    if picovector_io.BUTTON_DOWN in held:  y += 6
+    if picovector_io.BUTTON_UP in held:    y = max(0, y - dy * 2)
+    if picovector_io.BUTTON_DOWN in held:  y = min(H - size, y + dy * 2)
     img.rectangle(int(x), int(y), size, size)
     display.update()
 `;

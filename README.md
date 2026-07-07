@@ -14,18 +14,28 @@ badgeware-wasm/
   picovector-micropython/     submodule -> pimoroni/picovector-micropython
                               (graphics, consumed as a USER_C_MODULE)
   picovector_wasm.cmake       badgeware's USER_C_MODULE glue (picovector for emscripten)
-  variants/badgeware-tufty2350/
-    mpconfigvariant.cmake      build config (async backend + picovector + manifest)
-    mpconfigvariant.h          MicroPython feature config for the board
-    manifest.py                frozen Python modules
-  simulator/modules/          pure-Python simulated hardware:
-    st7789.py                   display: a bytearray framebuffer picovector draws
-                                into, blitted to the host canvas by address
-    machine.py                  Pin / PWM / ADC / I2C / RTC
-    picovector_io.py            button input
-    ...                         networking + firmware shims (fetch, wifi, ...)
-  .github/workflows/build.yml CI: builds the asyncify-fast + jspi variants
+  variants/
+    badgeware_common.cmake     shared build config (async backend + picovector + manifest)
+    badgeware_common.h         shared MicroPython feature config
+    badgeware-tufty2350/        per-board: board name + frozen display driver
+    badgeware-badger2350/
+    badgeware-blinky2350/
+  simulator/
+    manifest_common.py         shared frozen modules (machine, input, shims, stdlib)
+    modules/                   pure-Python simulated hardware:
+      st7789.py                 Tufty:  320x240 RGB LCD
+      ssd1680.py                Badger: 264x176 e-ink
+      blinky.py                 Blinky: 39x26 RGB LED matrix
+      machine.py                Pin / PWM / ADC / I2C / RTC
+      picovector_io.py          button input
+      ...                       networking + firmware shims (fetch, wifi, ...)
+  .github/workflows/build.yml CI: builds each board x async backend
 ```
+
+Each display driver subclasses `bytearray` (so it *is* the framebuffer),
+exposes the board's resolution + methods, and blits by address on `update()`.
+Adding a board is: a display-driver module + a three-line variant directory
+(board name + which display to freeze); everything else is shared.
 
 There are **no badgeware C sources**: the simulated hardware is Python, and the
 only native module is picovector (via `USER_C_MODULES`). The webassembly port
@@ -59,13 +69,21 @@ git -C micropython submodule update --init lib/micropython-lib
 
 make -C micropython/mpy-cross          # host mpy-cross
 
-# Configure + build (async backend: asyncify-fast [default] or jspi)
+# Configure + build a board (tufty2350 | badger2350 | blinky2350) and async
+# backend (asyncify-fast [default] | jspi):
 emcmake cmake -B build -S micropython/ports/webassembly \
   -DMICROPY_VARIANT_DIR=$PWD/variants/badgeware-tufty2350 \
   -DBADGEWARE_ASYNC=asyncify-fast
 cmake --build build -j
 
 # -> build/micropython.mjs + build/micropython.wasm
+```
+
+Or use the helper, which also stages the result for the host page:
+
+```sh
+tools/build.sh tufty2350            # or badger2350 / blinky2350
+python3 -m http.server -d host 8000 # then open http://localhost:8000/
 ```
 
 [pv]: https://github.com/pimoroni/picovector-micropython

@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# Build the badgeware-tufty2350 simulator and stage it for the host page.
+# Build a badgeware simulator variant and stage it for the host page.
 #
-#   tools/build.sh [asyncify-fast|jspi]     (default: asyncify-fast)
+#   tools/build.sh [board] [async]
+#     board: tufty2350 (default) | badger2350 | blinky2350
+#     async: asyncify-fast (default) | jspi
 #
 # Activates the Emscripten SDK if emcc isn't already on PATH (looking for a
 # sibling ../emsdk or $EMSDK), initialises the submodules the build needs,
@@ -9,7 +11,8 @@
 # micropython.mjs/.wasm into host/ so you can serve it.
 set -euo pipefail
 
-ASYNC="${1:-${BADGEWARE_ASYNC:-asyncify-fast}}"
+BOARD="${1:-${BADGEWARE_BOARD:-tufty2350}}"
+ASYNC="${2:-${BADGEWARE_ASYNC:-asyncify-fast}}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -40,9 +43,15 @@ git -C micropython submodule update --init lib/micropython-lib
 # Host mpy-cross for the frozen manifest.
 make -C micropython/mpy-cross -j"$(jobs)"
 
-BUILD="build-$ASYNC"
+VARIANT_DIR="$ROOT/variants/badgeware-$BOARD"
+if [ ! -f "$VARIANT_DIR/mpconfigvariant.cmake" ]; then
+    echo "error: unknown board '$BOARD' (no $VARIANT_DIR)" >&2
+    exit 1
+fi
+
+BUILD="build-$BOARD-$ASYNC"
 emcmake cmake -B "$BUILD" -S micropython/ports/webassembly \
-    -DMICROPY_VARIANT_DIR="$ROOT/variants/badgeware-tufty2350" \
+    -DMICROPY_VARIANT_DIR="$VARIANT_DIR" \
     -DBADGEWARE_ASYNC="$ASYNC"
 cmake --build "$BUILD" -j"$(jobs)"
 
@@ -51,6 +60,6 @@ mkdir -p host
 cp "$BUILD/micropython.mjs" "$BUILD/micropython.wasm" host/
 
 echo
-echo "Built '$ASYNC' -> host/micropython.mjs (+ .wasm)"
+echo "Built '$BOARD' ($ASYNC) -> host/micropython.mjs (+ .wasm)"
 echo "Serve it:  python3 -m http.server -d host 8000"
 echo "Then open: http://localhost:8000/"

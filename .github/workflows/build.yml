@@ -15,7 +15,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # The async backend (see variants/badgeware-tufty2350/mpconfigvariant.cmake).
+        board: [tufty2350, badger2350, blinky2350]
+        # The async backend (see variants/badgeware_common.cmake).
         async: [asyncify-fast, jspi]
 
     steps:
@@ -40,18 +41,18 @@ jobs:
 
       - name: Configure
         run: |
-          emcmake cmake -B build-${{ matrix.async }} -S micropython/ports/webassembly \
-            -DMICROPY_VARIANT_DIR=$PWD/variants/badgeware-tufty2350 \
+          emcmake cmake -B build -S micropython/ports/webassembly \
+            -DMICROPY_VARIANT_DIR=$PWD/variants/badgeware-${{ matrix.board }} \
             -DBADGEWARE_ASYNC=${{ matrix.async }}
 
       - name: Build
-        run: cmake --build build-${{ matrix.async }} -j$(nproc)
+        run: cmake --build build -j$(nproc)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: badgeware-tufty2350-${{ matrix.async }}
+          name: badgeware-${{ matrix.board }}-${{ matrix.async }}
           path: |
-            build-${{ matrix.async }}/micropython.mjs
-            build-${{ matrix.async }}/micropython.wasm
+            build/micropython.mjs
+            build/micropython.wasm
           if-no-files-found: error
