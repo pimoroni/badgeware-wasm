@@ -35,6 +35,11 @@ target_compile_options(usermod_picovector INTERFACE
     $<$<COMPILE_LANGUAGE:CXX>:-Wno-error;-fno-exceptions;-fno-rtti>
 )
 
+# The tufty variant flags its tinted-LCD black/white flavour (generated/color.cpp).
+if(BADGEWARE_TUFTY)
+    target_compile_definitions(usermod_picovector INTERFACE TUFTY=1)
+endif()
+
 # bitbank2 JPEGDEC falls back to <Arduino.h> unless a known platform macro is
 # set; picovector only sets PICO_BUILD on pico. Tell it this is a plain-libc
 # target so it uses <stdlib.h>/<stdint.h> instead.
