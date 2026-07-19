@@ -38,7 +38,7 @@ _SIM = "$(BADGEWARE_DIR)/simulator/modules"
 
 # Simulated machine peripherals (Pin/PWM/ADC/I2C/RTC) and button input.
 module("machine.py", base_path=_SIM, opt=3)
-module("picovector_io.py", base_path=_SIM, opt=3)
+module("_input.py", base_path=_SIM, opt=3)
 
 # Networking. A browser can't open raw sockets, so the socket-based `requests`
 # and `urllib.urequest` from micropython-lib can't run here; freeze fetch-backed
