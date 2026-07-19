@@ -67,3 +67,6 @@ class ST7789(bytearray):
 
     def set_max_pio_clock(self, value):
         pass
+
+    def set_framerate(self, value):
+        pass
