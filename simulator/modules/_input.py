@@ -1,4 +1,4 @@
-# Pure-Python `picovector_io` input shim for the Badgeware WASM simulator.
+# Pure-Python `_input` input shim for the Badgeware WASM simulator.
 #
 # Mirrors the C input module: poll() samples the (simulated) button GPIOs via the
 # machine shim, and the module exposes frame-stable held/pressed/released/changed
