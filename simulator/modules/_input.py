@@ -43,8 +43,22 @@ def poll():
     _ticks = time.ticks_ms()
 
 
+# Button bit -> GPIO in the C module's reported order (HOME, A, B, C, UP, DOWN).
+_ORDER = (
+    (BUTTON_HOME, 22),
+    (BUTTON_A, 7),
+    (BUTTON_B, 9),
+    (BUTTON_C, 10),
+    (BUTTON_UP, 11),
+    (BUTTON_DOWN, 6),
+)
+
+
 def _button_tuple(mask):
-    return tuple(bit for bit in (BUTTON_HOME, BUTTON_A, BUTTON_B, BUTTON_C, BUTTON_UP, BUTTON_DOWN) if mask & bit)
+    # Return the board Pin objects for the set buttons, matching the C _input
+    # module (which yields machine.Pin.board.<button>). badge.pressed() tests
+    # `pin in _input.pressed`; Pin compares by GPIO id (see machine.Pin).
+    return tuple(machine.Pin(gpio) for bit, gpio in _ORDER if mask & bit)
 
 
 # Dynamic module attributes (PEP 562), matching the C module's delegation.

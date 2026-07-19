@@ -148,6 +148,15 @@ class Pin:
     def irq(self, *args, **kwargs):
         pass  # never fires in the simulator
 
+    # Compare/hash by GPIO id so board pins behave like the firmware's singleton
+    # Pins: `machine.Pin.board.BUTTON_A in _input.pressed` matches even though
+    # each `.board` access and each _input tuple entry is a fresh instance.
+    def __eq__(self, other):
+        return isinstance(other, Pin) and other.id == self.id
+
+    def __hash__(self):
+        return hash(self.id)
+
     def __repr__(self):
         return "Pin(%d)" % self.id
 
