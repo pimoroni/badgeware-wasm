@@ -152,19 +152,16 @@ Publishing a release attaches this build to it as
 copy instead of building emscripten of its own:
 
 ```sh
-gh release download <tag> --repo pimoroni/badgeware-wasm \
-  --pattern 'badgeware-tufty2350-batteries-jspi.zip'
-unzip -q badgeware-tufty2350-batteries-jspi.zip -d runtime
+curl -fsSL -o runtime.zip https://github.com/pimoroni/badgeware-wasm/releases/\
+download/<tag>/badgeware-tufty2350-batteries-jspi.zip
+unzip -q runtime.zip -d runtime
 node your-driver.mjs runtime/micropython.mjs
 ```
 
-The two files stay together and keep their names: the generated
-`micropython.mjs` looks for `micropython.wasm` beside itself, so splitting or
-renaming them means passing `url` to `loadMicroPython` to put it right again.
-
-While this repository is private a plain `curl` of the download URL will not do:
-`gh` needs a token with read access to it, which in another repository's Actions
-means a PAT or a deploy key in a secret, `GITHUB_TOKEN` being scoped to the
-repository running the job.
+No token: the release is public, so another repository's Actions can fetch it
+with nothing set up. The two files stay together and keep their names, though -
+the generated `micropython.mjs` looks for `micropython.wasm` beside itself, so
+splitting or renaming them means passing `url` to `loadMicroPython` to put it
+right again.
 
 [pv]: https://github.com/pimoroni/picovector-micropython
