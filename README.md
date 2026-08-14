@@ -141,8 +141,9 @@ not control - build the same variant against a backend that needs none of it:
 tools/build.sh tufty2350-batteries asyncify-fast
 ```
 
-Everything above still applies; the wasm is about 1.7x the size and slower to
-suspend. `-DBADGEWARE_ASYNC` overrides the variant's default either way.
+Everything above still applies; the wasm is 1.7MB against jspi's 1.1MB, and
+slower to suspend. `-DBADGEWARE_ASYNC` overrides the variant's default either
+way, and `tools/smoke.mjs` only asks for JSPI of a build that uses it.
 
 ### Fetching a built one
 
