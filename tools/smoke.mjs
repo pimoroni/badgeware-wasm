@@ -8,6 +8,7 @@
 //
 // Exits non-zero on any failure, so CI can gate on it.
 
+import { readFile } from "node:fs/promises"
 import { pathToFileURL } from "node:url"
 import { resolve } from "node:path"
 
@@ -21,9 +22,16 @@ if (!built) {
 // check fires from somewhere deep in the generated module ("JSPI not supported by current
 // environment"). Say which node this needs instead, and say it before anything loads.
 //
-// The flag is not a portable answer: node 24 and earlier want --experimental-wasm-jspi,
-// and node 26 dropped it as a bad option, JSPI being on by default there.
-if (typeof WebAssembly.Suspending !== "function") {
+// Only for a jspi build: an asyncify one runs anywhere, and refusing it here would be a
+// requirement it does not have. The module announces which it is as it loads, which is
+// too late, so the announcement is read out of the file first.
+//
+// The flag is not a portable answer either: node 24 and earlier want
+// --experimental-wasm-jspi, and node 26 dropped it as a bad option, JSPI being on by
+// default there.
+const backend = /__MICROPYTHON_ASYNC__ = "([a-z-]+)"/.exec(
+  await readFile(resolve(built), "utf8"))
+if (backend?.[1] === "jspi" && typeof WebAssembly.Suspending !== "function") {
   console.error(
     `this node (${process.version}) has no JSPI, which a jspi build needs.\n` +
     "Use node 25 or newer, where it is on by default; on node 22-24 run node with " +
