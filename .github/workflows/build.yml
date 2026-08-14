@@ -59,3 +59,58 @@ jobs:
             build/micropython.mjs
             build/micropython.wasm
           if-no-files-found: error
+
+  # The runtime frozen in, for a caller that wants to run a badge app with nothing
+  # staged around it. A job of its own and not a matrix entry: it freezes the firmware's
+  # own badgeware package and fonts, so it needs a checkout of that too, and JSPI is the
+  # only backend worth building it for.
+  batteries:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Checkout the firmware, for the runtime and the fonts
+        uses: actions/checkout@v7
+        with:
+          repository: pimoroni/tufty2350
+          ref: feature/align-v3
+          path: firmware
+
+      - name: Init submodules
+        run: |
+          git submodule update --init micropython picovector-micropython
+          git -C picovector-micropython submodule update --init
+          git -C micropython submodule update --init lib/micropython-lib
+
+      - name: Set up Emscripten
+        uses: mymindstorm/setup-emsdk@v16
+        with:
+          version: 6.0.0
+
+      - name: Build mpy-cross
+        run: make -C micropython/mpy-cross -j$(nproc)
+
+      - name: Configure
+        run: |
+          emcmake cmake -B build -S micropython/ports/webassembly \
+            -DMICROPY_VARIANT_DIR=$PWD/variants/badgeware-tufty2350-batteries \
+            -DBADGEWARE_FIRMWARE_DIR=$PWD/firmware \
+            -DBADGEWARE_ASYNC=jspi
+
+      - name: Build
+        run: cmake --build build -j$(nproc)
+
+      # It is meant to run with nothing staged, so this is the check that it does.
+      - name: Import the runtime and draw a frame
+        run: node tools/smoke.mjs build/micropython.mjs
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: badgeware-tufty2350-batteries-jspi
+          path: |
+            build/micropython.mjs
+            build/micropython.wasm
+          if-no-files-found: error
