@@ -17,6 +17,20 @@ if (!built) {
   process.exit(2)
 }
 
+// A jspi build suspends through WebAssembly.Suspending, and without it emscripten's own
+// check fires from somewhere deep in the generated module ("JSPI not supported by current
+// environment"). Say which node this needs instead, and say it before anything loads.
+//
+// The flag is not a portable answer: node 24 and earlier want --experimental-wasm-jspi,
+// and node 26 dropped it as a bad option, JSPI being on by default there.
+if (typeof WebAssembly.Suspending !== "function") {
+  console.error(
+    `this node (${process.version}) has no JSPI, which a jspi build needs.\n` +
+    "Use node 25 or newer, where it is on by default; on node 22-24 run node with " +
+    "--experimental-wasm-jspi. An asyncify or asyncify-fast build needs none of this.")
+  process.exit(2)
+}
+
 const { loadMicroPython } = await import(pathToFileURL(resolve(built)).href)
 
 // The display driver hands its framebuffer to the host on update(); headless, it goes
