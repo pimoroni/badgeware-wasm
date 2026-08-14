@@ -123,4 +123,33 @@ here: clone `tufty2350` beside this repo, or configure with
 the fonts put ~430KB on the wasm, and everything else is unchanged - the two
 Tufty variants build side by side.
 
+`tools/smoke.mjs` is the check that the claim holds - it imports the runtime,
+draws a frame and reads the framebuffer back with nothing staged:
+
+```sh
+node tools/smoke.mjs build-tufty2350-batteries-jspi/micropython.mjs
+```
+
+### Fetching a built one
+
+Publishing a release attaches this build to it as
+`badgeware-tufty2350-batteries-jspi.zip`, so another repository's CI can pin a
+copy instead of building emscripten of its own:
+
+```sh
+gh release download <tag> --repo pimoroni/badgeware-wasm \
+  --pattern 'badgeware-tufty2350-batteries-jspi.zip'
+unzip -q badgeware-tufty2350-batteries-jspi.zip -d runtime
+node your-driver.mjs runtime/micropython.mjs
+```
+
+The two files stay together and keep their names: the generated
+`micropython.mjs` looks for `micropython.wasm` beside itself, so splitting or
+renaming them means passing `url` to `loadMicroPython` to put it right again.
+
+While this repository is private a plain `curl` of the download URL will not do:
+`gh` needs a token with read access to it, which in another repository's Actions
+means a PAT or a deploy key in a secret, `GITHUB_TOKEN` being scoped to the
+repository running the job.
+
 [pv]: https://github.com/pimoroni/picovector-micropython

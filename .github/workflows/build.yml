@@ -2,11 +2,16 @@ name: build
 
 # Build the badgeware-tufty2350 simulator for the suspend-capable async
 # backends and publish each micropython.mjs / .wasm pair as an artifact.
+#
+# The batteries-included build is also attached to a release, as one zip, so
+# another repository's CI can fetch a pinned copy without a build of its own.
 
 on:
   push:
     branches: [main]
   pull_request:
+  release:
+    types: [published]
   workflow_dispatch:
 
 jobs:
@@ -66,6 +71,11 @@ jobs:
   # only backend worth building it for.
   batteries:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # to attach the build to a release
+
+    env:
+      NAME: badgeware-tufty2350-batteries-jspi
 
     steps:
       - name: Checkout
@@ -109,8 +119,24 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
-          name: badgeware-tufty2350-batteries-jspi
+          name: ${{ env.NAME }}
           path: |
             build/micropython.mjs
             build/micropython.wasm
           if-no-files-found: error
+
+      # As one zip, and with the filenames kept: the generated micropython.mjs locates
+      # its wasm by name in its own directory, so the pair travels together or the
+      # caller has to pass `url` to loadMicroPython to put it right.
+      - name: Zip it
+        if: github.event_name == 'release'
+        run: |
+          cp build/micropython.mjs build/micropython.wasm .
+          zip "$NAME.zip" micropython.mjs micropython.wasm
+          unzip -l "$NAME.zip"
+
+      - name: Attach to the release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v3
+        with:
+          files: ${{ env.NAME }}.zip
