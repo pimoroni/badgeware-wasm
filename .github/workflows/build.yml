@@ -99,6 +99,14 @@ jobs:
         with:
           version: 6.0.0
 
+      # The runner's own node is older than JSPI, so the smoke check below would fail
+      # with "JSPI not supported by current environment". 25 is the first with it on by
+      # default; 24 and earlier need --experimental-wasm-jspi, which 26 rejects.
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 26
+
       - name: Build mpy-cross
         run: make -C micropython/mpy-cross -j$(nproc)
 

@@ -130,6 +130,20 @@ draws a frame and reads the framebuffer back with nothing staged:
 node tools/smoke.mjs build-tufty2350-batteries-jspi/micropython.mjs
 ```
 
+**JSPI needs a recent runtime.** A jspi build suspends through
+`WebAssembly.Suspending`, and without it emscripten stops with "JSPI not
+supported by current environment". That means node 25 or newer (node 22-24 want
+`--experimental-wasm-jspi`, which node 26 rejects as a bad option), or Chrome
+137+ in a browser. Where that is awkward - an older CI runner, a browser you do
+not control - build the same variant against a backend that needs none of it:
+
+```sh
+tools/build.sh tufty2350-batteries asyncify-fast
+```
+
+Everything above still applies; the wasm is about 1.7x the size and slower to
+suspend. `-DBADGEWARE_ASYNC` overrides the variant's default either way.
+
 ### Fetching a built one
 
 Publishing a release attaches this build to it as
