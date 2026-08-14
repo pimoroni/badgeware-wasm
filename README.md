@@ -20,6 +20,8 @@ badgeware-wasm/
     badgeware-tufty2350/        per-board: board name + frozen display driver
     badgeware-badger2350/
     badgeware-blinky2350/
+    badgeware-tufty2350-batteries/
+                                Tufty, with the badgeware runtime frozen in
   simulator/
     manifest_common.py         shared frozen modules (machine, input, shims, stdlib)
     modules/                   pure-Python simulated hardware:
@@ -28,6 +30,8 @@ badgeware-wasm/
       blinky.py                 Blinky: 39x26 RGB LED matrix
       machine.py                Pin / PWM / ADC / I2C / RTC
       picovector_io.py          button input
+      powman.py                 sleep / wake, which a tab cannot do
+      pcf85063a.py              the RTC, read off the host clock
       ...                       networking + firmware shims (fetch, wifi, ...)
   .github/workflows/build.yml CI: builds each board x async backend
 ```
@@ -88,5 +92,35 @@ tools/build.sh tufty2350 jspi        # optional async backend: asyncify-fast | j
 python3 -m http.server -d build-tufty2350-asyncify-fast 8000
 # then open http://localhost:8000/
 ```
+
+### Batteries included
+
+The ordinary builds leave the badgeware runtime, its peripheral shims and the
+fonts on the filesystem, where whoever is using the simulator can read and edit
+them. `tufty2350-batteries` freezes all three into the image instead, so a
+caller that only wants to *run* a badge app has nothing to stage:
+
+```sh
+tools/build.sh tufty2350-batteries jspi
+```
+
+```js
+const mp = await loadMicroPython({ url: "micropython.wasm" })
+globalThis.blitrgba = () => {}          // headless: swallow the flip
+await mp.runPython(`
+import badgeware                        # badge, screen, image, tween, BUTTON_*
+badge.mode(HIRES | VSYNC)
+screen.pen = color.rgb(255, 0, 0)
+screen.rectangle(0, 0, 320, 240)
+print(len(screen.raw))                  # 307200 bytes of RGBA
+`)
+```
+
+Nothing needs a canvas, so it runs under plain `node`. The badgeware package
+and the fonts are the firmware's, read from a checkout of it rather than copied
+here: clone `tufty2350` beside this repo, or configure with
+`-DBADGEWARE_FIRMWARE_DIR=/path/to/tufty2350`. JSPI is this variant's default,
+the fonts put ~430KB on the wasm, and everything else is unchanged - the two
+Tufty variants build side by side.
 
 [pv]: https://github.com/pimoroni/picovector-micropython

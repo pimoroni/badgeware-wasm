@@ -3,6 +3,7 @@
 #
 #   tools/build.sh [board] [async]
 #     board: tufty2350 (default) | badger2350 | blinky2350
+#            | tufty2350-batteries (the runtime frozen in; see README)
 #     async: asyncify-fast (default) | jspi
 #
 # Activates the Emscripten SDK if emcc isn't already on PATH (looking for a
