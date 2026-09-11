@@ -5,4 +5,4 @@
 [submodule "picovector-micropython"]
 	path = picovector-micropython
 	url = https://github.com/pimoroni/picovector-micropython
-	branch = v3.1.0
+	branch = pico3d-v3.1.0
