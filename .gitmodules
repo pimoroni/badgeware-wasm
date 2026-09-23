@@ -1,8 +1,8 @@
 [submodule "micropython"]
 	path = micropython
 	url = https://github.com/pimoroni/micropython
-	branch = webassembly-cmake
+	branch = v3.1.0
 [submodule "picovector-micropython"]
 	path = picovector-micropython
 	url = https://github.com/pimoroni/picovector-micropython
-	branch = main
+	branch = v3.1.0
