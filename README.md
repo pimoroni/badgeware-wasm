@@ -29,6 +29,9 @@ badgeware-wasm/
       machine.py                Pin / PWM / ADC / I2C / RTC
       picovector_io.py          button input
       ...                       networking + firmware shims (fetch, wifi, ...)
+    overlay/                   filesystem files added on top of a firmware bundle:
+      common/                   stand-ins for every board (powman, rtc, sensors, cdcaux, ...)
+      tufty2350/                Tufty simulator patches and contrib apps
   .github/workflows/build.yml CI: builds each board x async backend
 ```
 
@@ -41,6 +44,19 @@ There are **no badgeware C sources**: the simulated hardware is Python, and the
 only native module is picovector (via `USER_C_MODULES`). The webassembly port
 itself is unmodified upstream-style MicroPython on the `webassembly-cmake`
 branch.
+
+## Simulator filesystem overlay
+
+The simulator's filesystem is a board's firmware debug bundle (from
+badgeware-debug's `tools/bundle.py`, published as each firmware release's
+`-simulator.zip`) with `simulator/overlay/common/` and then
+`simulator/overlay/<board>/` copied over it. The Badgeware IDE's
+`tools/import_bundle.py` does this. The overlay holds pure-Python stand-ins for
+frozen or C modules the firmware filesystem doesn't carry (`powman`,
+`pcf85063a`, `lsm6ds3`, `qwstpad`, the BME280 and LTR559 breakouts, `secrets`,
+a `cdcaux` stub, and `badgeware/rtc.py` without the alarm pin), and per-board
+changes such as Tufty's patched apps, pre-IDE `badgeware/__init__.py` and
+contrib apps.
 
 ## How the display works
 
