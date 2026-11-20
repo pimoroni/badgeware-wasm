@@ -21,17 +21,40 @@
     padding: 1px 6px; font-family: ui-monospace, monospace; font-size: 12px;
   }
   #status { color: #7f8592; min-height: 1.2em; }
+
+  /* Case lights: four PWM zones (CL0..CL3) that light the case from behind.
+     Drawn as soft glows behind the screen corners; see sim_pwm_set for the
+     duty -> opacity curve. */
+  #badge { position: relative; isolation: isolate; }
+  #badge canvas { position: relative; z-index: 1; display: block; }
+  .glow {
+    position: absolute; width: 360px; height: 300px; z-index: 0;
+    border-radius: 50%; pointer-events: none; opacity: 0;
+    background: radial-gradient(closest-side, rgba(255,240,224,.9), rgba(255,240,224,0));
+    filter: blur(24px); transition: opacity 60ms linear;
+  }
+  /* Same order as the IDE's 3D case-light fallback positions. */
+  .glow[data-cl="0"] { left: -120px;  top: -100px; }
+  .glow[data-cl="1"] { left: -120px;  bottom: -100px; }
+  .glow[data-cl="2"] { right: -120px; top: -100px; }
+  .glow[data-cl="3"] { right: -120px; bottom: -100px; }
+  #lights { color: #6b7080; font-variant-numeric: tabular-nums; }
   .hint { color: #6b7080; }
 </style>
 </head>
 <body>
   <h1 id="board">Badgeware WASM simulator</h1>
-  <canvas id="screen" width="640" height="480"></canvas>
+  <div id="badge">
+    <div class="glow" data-cl="0"></div><div class="glow" data-cl="1"></div>
+    <div class="glow" data-cl="2"></div><div class="glow" data-cl="3"></div>
+    <canvas id="screen" width="640" height="480"></canvas>
+  </div>
   <div id="status">loading MicroPython...</div>
   <div class="hint">
     buttons: <kbd>A</kbd> <kbd>B</kbd> <kbd>C</kbd> &middot;
     <kbd>&uarr;</kbd> <kbd>&darr;</kbd> &middot; <kbd>H</kbd> home
   </div>
+  <div id="lights">case lights: 0% 0% 0% 0%</div>
 
 <script type="module">
 import { loadMicroPython } from "./micropython.mjs";
@@ -62,6 +85,28 @@ globalThis.blitrgba = (addr, w, h) => {
 // backlight(0..1) - visualised by dimming the canvas.
 globalThis.backlight = (v) => { canvas.style.filter = `brightness(${Math.max(0.15, v)})`; };
 
+// --- host contract: case lights ---------------------------------------------
+// machine.PWM.duty_u16() calls sim_pwm_set(gpio, freq, duty). GPIO 0..3 are the
+// case-light channels CL0..CL3; other PWM channels have no visible effect here.
+// The LEDs' light output is proportional to duty, but CSS opacity behaves like a
+// gamma-encoded (sRGB) value, so encode the duty before using it as opacity.
+// badge.caselights() already applies a 2.2 gamma to the duty, so
+// caselights(0.5) -> duty ~22% -> opacity ~50%, about half as bright as full,
+// as on the badge. The status line shows the raw duty.
+const SRGB_GAMMA = 2.2;
+const glows = [...document.querySelectorAll(".glow")];
+const lights = [0, 0, 0, 0];
+const lightsText = document.getElementById("lights");
+globalThis.sim_pwm_set = (gpio, freq, duty) => {
+  if (gpio < 0 || gpio > 3) return;
+  const v = Math.max(0, Math.min(65535, duty)) / 65535;
+  if (v === lights[gpio]) return;
+  lights[gpio] = v;
+  glows[gpio].style.opacity = Math.pow(v, 1 / SRGB_GAMMA);
+  lightsText.textContent = "case lights: " +
+    lights.map((l) => Math.round(l * 100) + "%").join(" ");
+};
+
 // --- host contract: buttons -------------------------------------------------
 // machine.py / picovector_io read this as an active-high pressed bitmask.
 const BUTTON = { HOME: 0x20, A: 0x10, B: 0x08, C: 0x04, UP: 0x02, DOWN: 0x01 };
@@ -84,8 +129,25 @@ addEventListener("keyup", (e) => {
 // Board-agnostic: uses whichever display driver this build froze (Tufty ST7789,
 // Badger SSD1680 or Blinky), and scales to that display's resolution.
 const DEMO = `
-import picovector, picovector_io
+import picovector, machine, math
 color = picovector.color
+
+# Button input: the current builds freeze _input (held = board Pins); older
+# builds had picovector_io (held = button bits).
+try:
+    import _input as io
+    BTN_A, BTN_UP, BTN_DOWN = (machine.Pin.board.BUTTON_A,
+                               machine.Pin.board.BUTTON_UP,
+                               machine.Pin.board.BUTTON_DOWN)
+except ImportError:
+    import picovector_io as io
+    BTN_A, BTN_UP, BTN_DOWN = io.BUTTON_A, io.BUTTON_UP, io.BUTTON_DOWN
+
+# Case lights CL0..CL3, driven the same way badgeware's badge.py does it.
+caselights = [machine.PWM(getattr(machine.Pin.board, "CL%d" % i)) for i in range(4)]
+for cl in caselights:
+    cl.freq(1000)
+ORDER = (0, 1, 3, 2)   # chase order round the case: CL0, CL1, CL3, CL2
 
 display = None
 for _mod, _cls in (("st7789", "ST7789"), ("ssd1680", "SSD1680"), ("blinky", "Blinky")):
@@ -102,12 +164,13 @@ W, H = display.WIDTH, display.HEIGHT
 img = picovector.image(W, H, memoryview(display))
 
 size = max(4, min(W, H) // 4)
+frame = 0
 x, y = 1.0, 1.0
 dx, dy = max(1.0, W / 100), max(1.0, H / 120)
 
 while True:
-    picovector_io.poll()
-    held = picovector_io.held
+    io.poll()
+    held = io.held
 
     x += dx; y += dy
     if x < 0 or x + size > W: dx = -dx; x += dx
@@ -117,10 +180,19 @@ while True:
     img.clear()
     # A/B/C tint the square; the D-pad nudges it.
     img.pen = color.green if held else color.red
-    if picovector_io.BUTTON_UP in held:    y = max(0, y - dy * 2)
-    if picovector_io.BUTTON_DOWN in held:  y = min(H - size, y + dy * 2)
+    if BTN_UP in held:    y = max(0, y - dy * 2)
+    if BTN_DOWN in held:  y = min(H - size, y + dy * 2)
     img.rectangle(int(x), int(y), size, size)
     display.update()
+
+    # Chase a glow around the four case-light zones; hold A for all on.
+    frame += 1
+    for i, cl in enumerate(caselights):
+        if BTN_A in held:
+            level = 1.0
+        else:
+            level = max(0.0, math.sin(frame / 12 - ORDER[i] * math.pi / 2))
+        cl.duty_u16(int(level * 65535))
 `;
 
 const mp = await loadMicroPython();
